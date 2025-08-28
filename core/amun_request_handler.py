@@ -39,6 +39,7 @@ import amun_logging
 ### DF: import LLM engine
 from llm_engine import LLMContextManager, API_KEY, MODEL, BASE_URL
 
+                
 class amun_reqhandler(asynchat.async_chat):
 
 	def __init__(self, divLogger):
@@ -237,7 +238,7 @@ class amun_reqhandler(asynchat.async_chat):
 
 		if len(welcome_list)>0:
 			self.log_obj.log("sending welcome message: %s" % ([welcome_list[0]]), 6, "crit", False, False)
-			rplmess = "%s\r\n" % (welcome_list[0])
+			rplmess = welcome_list[0].replace("root#", '')+"\r\n"
 			try:
 				bytesTosend = len(rplmess)
 				while bytesTosend>0:
@@ -283,12 +284,10 @@ class amun_reqhandler(asynchat.async_chat):
 			self.collect_incoming_data( bytes )
 		except KeyboardInterrupt:
 			raise
-
+                
+                                
 	### DF: Modified request handler function
         def collect_incoming_data(self, data):
-                #if isinstance(data, str):
-                        #data = data.replace('\r', '').replace('\n', '')
-                        
                 # 1. get module list
                 vuln_modulList = self.get_existing_connection() if self.currentConnections.has_key(self.identifier) else self.set_existing_connection()
 
@@ -304,20 +303,40 @@ class amun_reqhandler(asynchat.async_chat):
 
                 # 4. invoke LLM for responses
                 try:
-                        cmd = data.decode('utf-8').strip()
+                        cmd = data.decode('utf-8', 'ignore').replace('\r', '')
+                        if '\n' in cmd:
+                                cmd = cmd.split('\n', 1)[0]
+                        cmd = cmd.strip()
+
+                        if not hasattr(self, 'first_command_ignored'):
+                                self.first_command_ignored = True
+                                self.log_obj.log("first command ignored for connection %s" % self.identifier, 6, "info", True, True)
+                                self.send("root#")
+                                return
+
                         if cmd:
                                 self.log_obj.log("command received: %s" % cmd, 6, "info", True, True)
                                 if cmd.lower() == "exit":
                                         self.close()
                                         return
 
-                        llm_reply = self.llm.ask(cmd)
-                        if llm_reply:
-                                self.send(llm_reply + "\r\nroot# ")
+                                llm_reply = self.llm.ask(cmd)
+                                out = (llm_reply + "\r\nroot#") if llm_reply else "root#"
+                                try:
+                                        self.send(out.encode('utf-8', 'ignore'))
+                                except:
+                                        self.send(out)
                         else:
-                                self.send("root# ")
+                                self.send("root#")
                 except UnicodeDecodeError:
                         pass
+
+                # update
+                if state == "amun_stage_finished" and result['shellresult'] != "None":
+                        self.close_when_done()
+                else:
+                        self.update_existing_connection(vuln_modulList)
+                        self.set_new_socket_connection()
                         
                 
                 if state == "amun_stage_finished" and result['shellresult'] != "None":

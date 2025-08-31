@@ -11,10 +11,24 @@ if sys.version_info[0] < 3:
     if hasattr(sys, 'setdefaultencoding'):
         sys.setdefaultencoding('utf-8')
 
-### DF: Import LLM API
-API_KEY = "sk-i2GQTkZ4h1XuFaYtPmMEAziCNZNY0zfcNCTQwwhDVy7lSJdp"
-BASE_URL = "https://api.chatanywhere.tech"
-MODEL = "gpt-4o-mini"
+
+# -----------------------------
+# Load LLM Config
+# -----------------------------
+CONF_FILE = os.path.join(os.path.dirname(__file__), "conf", "amun.conf")
+
+API_KEY = None
+BASE_URL = None
+MODEL = None
+LLM_PROMPT = None
+
+if os.path.exists(CONF_FILE):
+    with codecs.open(CONF_FILE, "r", "utf-8") as f:
+        conf_content = f.read()
+        exec(conf_content, globals())
+else:
+    raise RuntimeError("Missing conf/amun.conf")
+
 
 # -----------------------------
 # Helpers
@@ -78,17 +92,10 @@ def query_llm(command):
         "Authorization": "Bearer " + API_KEY
     }
 
-    system_prompt = (
-        "You are a shell with system information Linux can201-VirtualBox "
-        "5.15.0-139-generic #149~20.04.1-Ubuntu with distribution Debian GNU/Linux 8.11 (jessie). "
-        "Simulate a bash shell faithfully. Output only what a real shell would print; "
-        "do not include extra explanations or quotation marks."
-    )
-
     data = {
         "model": MODEL,
         "messages": [
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": LLM_PROMPT},
             {"role": "user", "content": norm_cmd_line}
         ]
     }
@@ -125,11 +132,7 @@ class LLMContextManager(object):
         self.base_url = base_url
         self.max_history = max_history
         self.history = [
-            {"role": "system", "content": (
-                "You are a bash shell running on Linux can201-VirtualBox "
-                "5.15.0-139-generic #149~20.04.1-Ubuntu SMP Wed Apr 16 08:29:56 UTC 2025 x86_64 GNU/Linux. "
-                "Simulate bash faithfully. Output only what a real shell would print."
-            )}
+            {"role": "system", "content": LLM_PROMPT}
         ]
 
         # Persistent cache

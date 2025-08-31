@@ -36,9 +36,14 @@ import shellcode_mgr_core
 import download_core
 import amun_logging
 
-### DF: import LLM engine
-from llm_engine import LLMContextManager, API_KEY, MODEL, BASE_URL
+### DF: import input manager
+from input_manager import split_commands
 
+### DF: import LLM engine
+from core.llm_engine import LLMContextManager, API_KEY, MODEL, BASE_URL
+
+### DF: import Blocker
+from blocker import Blocker
                 
 class amun_reqhandler(asynchat.async_chat):
 
@@ -67,6 +72,9 @@ class amun_reqhandler(asynchat.async_chat):
 		
 		### DF: LLM init
 		self.llm = None
+
+		### DF: Blocker init
+		self.blocker = Blocker("transition_matrix.csv")
 
 	def __del__(self):
 		pass
@@ -287,64 +295,75 @@ class amun_reqhandler(asynchat.async_chat):
                 
                                 
 	### DF: Modified request handler function
-        def collect_incoming_data(self, data):
-                # 1. get module list
-                vuln_modulList = self.get_existing_connection() if self.currentConnections.has_key(self.identifier) else self.set_existing_connection()
+	def collect_incoming_data(self, data):
+		# 1. get module list
+		vuln_modulList = self.get_existing_connection() if self.currentConnections.has_key(self.identifier) else self.set_existing_connection()
 
-                # 2. invoke vuln module
-                result, state = self.handle_vulnerabilities(data, vuln_modulList)
+		# 2. invoke vuln module
+		result, state = self.handle_vulnerabilities(data, vuln_modulList)
 
-                # 3. reply vuln info
-                for reply_message in result.get('replies', []):
-                        try:
-                                self.send(reply_message)
-                        except Exception as e:
-                                self.log_obj.log("error sending reply: %s" % str(e), 6, "crit", False, True)
+		# 3. reply vuln info
+		for reply_message in result.get('replies', []):
+			try:
+				self.send(reply_message)
+			except Exception as e:
+				self.log_obj.log("error sending reply: %s" % str(e), 6, "crit", False, True)
 
-                # 4. invoke LLM for responses
-                try:
-                        cmd = data.decode('utf-8', 'ignore').replace('\r', '')
-                        if '\n' in cmd:
-                                cmd = cmd.split('\n', 1)[0]
-                        cmd = cmd.strip()
+		# 4. command processing
+		try:
+			cmd_str = data.decode('utf-8', 'ignore').replace('\r', '')
+			if '\n' in cmd_str:
+				cmd_str = cmd_str.split('\n', 1)[0]
+			cmd_str = cmd_str.strip()
 
-                        if not hasattr(self, 'first_command_ignored'):
-                                self.first_command_ignored = True
-                                self.log_obj.log("first command ignored for connection %s" % self.identifier, 6, "info", True, True)
-                                self.send("root#")
-                                return
+			if not hasattr(self, 'first_command_ignored'):
+				self.first_command_ignored = True
+				self.log_obj.log("first command ignored for connection %s" % self.identifier, 6, "info", True, True)
+				self.send("root#")
+				return
 
-                        if cmd:
-                                self.log_obj.log("command received: %s" % cmd, 6, "info", True, True)
-                                if cmd.lower() == "exit":
-                                        self.close()
-                                        return
+			commands = split_commands(cmd_str)
 
-                                llm_reply = self.llm.ask(cmd)
-                                out = (llm_reply + "\r\nroot#") if llm_reply else "root#"
-                                try:
-                                        self.send(out.encode('utf-8', 'ignore'))
-                                except:
-                                        self.send(out)
-                        else:
-                                self.send("root#")
-                except UnicodeDecodeError:
-                        pass
+			if commands:
+				if "exit" in [c.lower() for c in commands]:
+					self.close()
+					return
 
-                # update
-                if state == "amun_stage_finished" and result['shellresult'] != "None":
-                        self.close_when_done()
-                else:
-                        self.update_existing_connection(vuln_modulList)
-                        self.set_new_socket_connection()
-                        
-                
-                if state == "amun_stage_finished" and result['shellresult'] != "None":
-                        self.close_when_done()
-                else:
-                        # update module list
-                        self.update_existing_connection(vuln_modulList)
-                        self.set_new_socket_connection()
+				self.log_obj.log("commands received: %s" % commands, 6, "info", True, True)
+
+				# for each subcmd, decide whether to block
+				block_flag = False
+				for cmd in commands:
+					decision = self.blocker.check_and_update(cmd)
+					self.log_obj.log("blocker decision for (%s): %s" % (cmd, decision), 6, "debug", True, True)
+					if decision["block"]:
+						block_flag = True
+
+				# for one cmd, if a subcmd is blocked, the whole cmd is blocked
+				if block_flag:
+					out = "permission denied\nroot#"
+				else:
+					llm_input = "; ".join(commands)
+					self.log_obj.log("LLM input (combined): %s" % llm_input, 6, "debug", True, True)
+					llm_reply = self.llm.ask(llm_input)
+					out = (llm_reply + "root#") if llm_reply else "root#"
+
+				try:
+					self.send(out.encode('utf-8', 'ignore'))
+				except:
+					self.send(out)
+			else:
+				self.send("root#")
+
+		except UnicodeDecodeError:
+			pass
+
+		# update
+		if state == "amun_stage_finished" and result['shellresult'] != "None":
+			self.close_when_done()
+		else:
+			self.update_existing_connection(vuln_modulList)
+			self.set_new_socket_connection()
 
 
 	def create_random_reply(self):

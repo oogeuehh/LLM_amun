@@ -44,6 +44,7 @@ from core.llm_engine import LLMContextManager, API_KEY, MODEL, BASE_URL
 
 ### DF: import Blocker
 from blocker import Blocker
+from blocker_logger import ExperimentLogger
                 
 class amun_reqhandler(asynchat.async_chat):
 
@@ -296,20 +297,17 @@ class amun_reqhandler(asynchat.async_chat):
                                 
 	### DF: Modified request handler function
 	def collect_incoming_data(self, data):
-		# 1. get module list
 		vuln_modulList = self.get_existing_connection() if self.currentConnections.has_key(self.identifier) else self.set_existing_connection()
 
-		# 2. invoke vuln module
 		result, state = self.handle_vulnerabilities(data, vuln_modulList)
 
-		# 3. reply vuln info
 		for reply_message in result.get('replies', []):
 			try:
 				self.send(reply_message)
 			except Exception as e:
 				self.log_obj.log("error sending reply: %s" % str(e), 6, "crit", False, True)
 
-		# 4. command processing
+		# command processing
 		try:
 			cmd_str = data.decode('utf-8', 'ignore').replace('\r', '')
 			if '\n' in cmd_str:
@@ -331,15 +329,32 @@ class amun_reqhandler(asynchat.async_chat):
 
 				self.log_obj.log("commands received: %s" % commands, 6, "info", True, True)
 
-				# for each subcmd, decide whether to block
+				# Blocker layer: process transitions pairwise
 				block_flag = False
 				for cmd in commands:
+					src = self.blocker.matrix.last_command
+					dst = cmd
+
 					decision = self.blocker.check_and_update(cmd)
+
+					# Log experiment data
+					if hasattr(self, 'experiment_logger'):
+						self.experiment_logger.log_transition(
+							connection_id=self.identifier,
+							src=src,
+							dst=dst,
+							Pr_Actual=decision.get("Pr_Actual"),
+							Pr_Max=decision.get("Pr_Max"),
+							payoff=decision.get("payoff"),
+							block=decision.get("block"),
+							commands_raw=cmd_str
+						)
+
 					self.log_obj.log("blocker decision for (%s): %s" % (cmd, decision), 6, "debug", True, True)
 					if decision["block"]:
 						block_flag = True
 
-				# for one cmd, if a subcmd is blocked, the whole cmd is blocked
+				# Reply layer
 				if block_flag:
 					out = "permission denied\nroot#"
 				else:
@@ -358,7 +373,7 @@ class amun_reqhandler(asynchat.async_chat):
 		except UnicodeDecodeError:
 			pass
 
-		# update
+		# 5. Update connection status
 		if state == "amun_stage_finished" and result['shellresult'] != "None":
 			self.close_when_done()
 		else:

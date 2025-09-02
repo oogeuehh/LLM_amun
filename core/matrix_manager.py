@@ -19,11 +19,12 @@ class Matrix:
             try:
                 with open(counts_file, "r", encoding="utf-8-sig") as f:
                     reader = csv.reader(f)
-                    header = next(reader)  # header[0] 是 index 名称（常为空），header[1:] 是列名顺序
+                    header = next(reader) 
                     if len(header) > 1:
                         columns_order = header[1:]
             except Exception:
                 columns_order = []
+
 
         self.counts_df = self._load_counts(counts_file)
 

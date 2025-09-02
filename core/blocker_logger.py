@@ -1,6 +1,7 @@
 import csv
 import time
 import os
+from datetime import datetime
 
 class ExperimentLogger:
     def __init__(self, filename="logs/experiment.log"):
@@ -22,7 +23,7 @@ class ExperimentLogger:
         else:
             self.step_counter[connection_id] += 1
 
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S.%f")
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
         step = self.step_counter[connection_id]
 
         with open(self.filename, 'a', newline='', encoding='utf-8') as f:

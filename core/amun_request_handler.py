@@ -76,6 +76,7 @@ class amun_reqhandler(asynchat.async_chat):
 
 		### DF: Blocker init
 		self.blocker = Blocker("transition_matrix.csv")
+		self.experiment_logger = ExperimentLogger("logs/experiment.log")
 
 	def __del__(self):
 		pass
@@ -338,17 +339,16 @@ class amun_reqhandler(asynchat.async_chat):
 					decision = self.blocker.check_and_update(cmd)
 
 					# Log experiment data
-					if hasattr(self, 'experiment_logger'):
-						self.experiment_logger.log_transition(
-							connection_id=self.identifier,
-							src=src,
-							dst=dst,
-							Pr_Actual=decision.get("Pr_Actual"),
-							Pr_Max=decision.get("Pr_Max"),
-							payoff=decision.get("payoff"),
-							block=decision.get("block"),
-							commands_raw=cmd_str
-						)
+					self.experiment_logger.log_transition(
+						connection_id=self.identifier,
+						src=src,
+						dst=dst,
+						Pr_Actual=decision.get("Pr_Actual"),
+						Pr_Max=decision.get("Pr_Max"),
+						payoff=decision.get("payoff"),
+						block=decision.get("block"),
+						commands_raw=cmd_str
+					)
 
 					self.log_obj.log("blocker decision for (%s): %s" % (cmd, decision), 6, "debug", True, True)
 					if decision["block"]:

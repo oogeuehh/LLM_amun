@@ -6,28 +6,19 @@ import os
 import re
 import codecs
 
+# -----------------------------
+# Python 2.7 encoding fix
+# -----------------------------
 if sys.version_info[0] < 3:
     reload(sys)
     if hasattr(sys, 'setdefaultencoding'):
         sys.setdefaultencoding('utf-8')
 
-
-# -----------------------------
-# Load LLM Config
-# -----------------------------
-CONF_FILE = os.path.join(os.path.dirname(__file__), "conf", "amun.conf")
-
-API_KEY = None
-BASE_URL = None
-MODEL = None
-LLM_PROMPT = None
-
-if os.path.exists(CONF_FILE):
-    with codecs.open(CONF_FILE, "r", "utf-8") as f:
-        conf_content = f.read()
-        exec(conf_content, globals())
-else:
-    raise RuntimeError("Missing conf/amun.conf")
+### DF: define the LLM info
+API_KEY = "sk-i2GQTkZ4h1XuFaYtPmMEAziCNZNY0zfcNCTQwwhDVy7lSJdp"
+BASE_URL = "https://api.chatanywhere.tech"
+MODEL = "gpt-4o-mini"
+LLM_PROMPT = "You are a shell with system information Linux can201-VirtualBox 5.15.0-139-generic #149~20.04.1-Ubuntu with distribution Debian GNU/Linux 8.11 (jessie). Simulate a bash shell faithfully. Output only what a real shell would print; do not include extra explanations"
 
 
 # -----------------------------
@@ -63,9 +54,10 @@ if os.path.exists(valid_file):
             cmd = line.strip()
             if cmd:
                 VALID_COMMANDS.add(cmd)
-                
 
-### DF: Clean output
+# -----------------------------
+# Clean output
+# -----------------------------
 def _sanitize_output(output):
     if not output:
         return ""
@@ -80,11 +72,11 @@ def _sanitize_output(output):
     output = re.sub(r"^plaintext\n", "", output)
 
     return output.strip()
-    
-    
+
+
 def query_llm(command):
     norm_cmd_line = _normalize_command(command)
-    cmd = (norm_cmd_line.split()[0] if norm_cmd_line else u"")
+    cmd = norm_cmd_line.split()[0] if norm_cmd_line else u""
 
     url = BASE_URL + "/v1/chat/completions"
     headers = {
@@ -118,12 +110,13 @@ def query_llm(command):
 
             return output
         else:
-            return "API error: {0} - {1}".format(response.status_code, response.text)
+            return "API error: %s - %s" % (response.status_code, response.text)
     except Exception as e:
         return "any errors occurred: " + str(e)
 
+
 # -----------------------------
-# LLM Context Manager with persistent cache + dynamic command collection
+# LLM Context Manager
 # -----------------------------
 class LLMContextManager(object):
     def __init__(self, model, api_key, base_url, max_history=20):
@@ -148,16 +141,14 @@ class LLMContextManager(object):
     def ask(self, command, stream=False):
         norm_cmd_line = _normalize_command(command)
         if not norm_cmd_line:
-            return "" 
+            return ""
 
         cmd = norm_cmd_line.split()[0]
 
-        # 1) collected command in catch
+        # 1) collected command in cache
         if (cmd in VALID_COMMANDS) or (norm_cmd_line in self.cmd_cache):
-            # look for catch
             if norm_cmd_line in self.cmd_cache:
                 return self.cmd_cache[norm_cmd_line]
-            # not in catch --> save
             return self._call_llm_and_cache(norm_cmd_line, dynamic_collect=False)
 
         # 2) new command --> collect according to LLM response
@@ -189,7 +180,6 @@ class LLMContextManager(object):
                 cmd_key = norm_cmd_line.split()[0]
 
                 if dynamic_collect:
-                    # unknown command --> leagal --> save in catch & VALID_COMMANDS
                     if cmd_key and not _looks_like_invalid(output):
                         if cmd_key not in VALID_COMMANDS:
                             VALID_COMMANDS.add(cmd_key)
@@ -201,13 +191,12 @@ class LLMContextManager(object):
                         self.cmd_cache[norm_cmd_line] = output
                         self._save_cache()
                 else:
-                    # known command --> invoke catch
                     self.cmd_cache[norm_cmd_line] = output
                     self._save_cache()
 
                 return output
             else:
-                return "API error: {0} - {1}".format(resp.status_code, resp.text)
+                return "API error: %s - %s" % (resp.status_code, resp.text)
         except Exception as e:
             return "any errors occurred: " + str(e)
 

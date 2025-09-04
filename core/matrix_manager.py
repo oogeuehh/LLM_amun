@@ -1,15 +1,16 @@
-# core/matrix_manager.py
 # -*- coding: utf-8 -*-
+from __future__ import division
 import pandas as pd
 import csv
 import os
+import codecs
 
 class Matrix:
     def __init__(self,
                  counts_file="core/transition_counts_matrix.csv",
                  probs_file="core/transition_probabilities_matrix.csv",
                  initial_states=None,
-                 epsilon: float = 4.48e-8):
+                 epsilon=4.48e-8):  # 去掉类型注解，兼容Python 2.7
         self.counts_file = counts_file
         self.probs_file = probs_file
         self.epsilon = epsilon
@@ -17,14 +18,14 @@ class Matrix:
         columns_order = []
         if os.path.exists(counts_file):
             try:
-                with open(counts_file, "r", encoding="utf-8-sig") as f:
+                # Python 2 用 codecs.open 支持 UTF-8
+                with codecs.open(counts_file, "r", "utf-8-sig") as f:
                     reader = csv.reader(f)
-                    header = next(reader) 
+                    header = next(reader)
                     if len(header) > 1:
                         columns_order = header[1:]
             except Exception:
                 columns_order = []
-
 
         self.counts_df = self._load_counts(counts_file)
 
@@ -52,7 +53,6 @@ class Matrix:
             self.counts_df = self.counts_df.reindex(index=self.state_order, columns=self.state_order, fill_value=0).astype("int64")
             self.probs_df  = self.probs_df.reindex(index=self.state_order, columns=self.state_order, fill_value=0.0).astype("float64")
         else:
-            # no init
             self.counts_df = self.counts_df.astype("int64") if not self.counts_df.empty else pd.DataFrame(dtype="int64")
             self.probs_df = self.probs_df.astype("float64") if not self.probs_df.empty else pd.DataFrame(dtype="float64")
 
@@ -63,7 +63,7 @@ class Matrix:
             df = pd.read_csv(path, index_col=0)
             states = list(df.index)
             return df.reindex(index=states, columns=states, fill_value=0).astype("int64")
-        except FileNotFoundError:
+        except (IOError, OSError):  # Python 2 没有 FileNotFoundError
             return pd.DataFrame(dtype="int64")
 
     def save_matrix(self):
@@ -123,7 +123,6 @@ class Matrix:
             return probs.astype("float64")
 
     def update_matrix(self, src, dst):
-        # new src/dst, append at final
         added = False
         for s in [src, dst]:
             if s not in self.state_order:
@@ -142,7 +141,6 @@ class Matrix:
             self.counts_df = self.counts_df.reindex(index=self.state_order, columns=self.state_order, fill_value=0).astype("int64")
             self.probs_df = self.probs_df.reindex(index=self.state_order, columns=self.state_order, fill_value=0.0).astype("float64")
 
-        # save matrix
         self.save_matrix()
 
     def find_optimal_pr(self, src, dst, probs_df=None):
@@ -153,11 +151,10 @@ class Matrix:
         if src not in df.index or dst not in df.columns:
             return 0.0
 
-        max_prob = float(df.loc[src, dst])
+        max_prob_container = [float(df.loc[src, dst])]
         visited = set()
 
         def dfs(current, cur_prob):
-            nonlocal max_prob
             visited.add(current)
             for nxt in df.columns:
                 if nxt in visited:
@@ -166,11 +163,11 @@ class Matrix:
                 if p <= 0:
                     continue
                 new_prob = cur_prob * p
-                if nxt == dst and new_prob > max_prob:
-                    max_prob = new_prob
-                if new_prob > max_prob:
+                if nxt == dst and new_prob > max_prob_container[0]:
+                    max_prob_container[0] = new_prob
+                if new_prob > max_prob_container[0]:
                     dfs(nxt, new_prob)
             visited.remove(current)
 
         dfs(src, 1.0)
-        return max_prob
+        return max_prob_container[0]

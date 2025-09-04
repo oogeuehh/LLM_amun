@@ -1,14 +1,19 @@
+# -*- coding: utf-8 -*-
 import csv
 import time
 import os
+import codecs
 from datetime import datetime
 
 class ExperimentLogger:
     def __init__(self, filename="logs/experiment.log"):
         self.filename = filename
-        os.makedirs(os.path.dirname(self.filename), exist_ok=True)
+        # 确保目录存在
+        if not os.path.exists(os.path.dirname(self.filename)):
+            os.makedirs(os.path.dirname(self.filename))
+        # 如果文件不存在，写入表头
         if not os.path.exists(self.filename):
-            with open(self.filename, 'w', newline='', encoding='utf-8') as f:
+            with codecs.open(self.filename, 'wb', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow([
                     "timestamp", "connection_id", "step",
@@ -18,6 +23,7 @@ class ExperimentLogger:
         self.step_counter = {}
 
     def log_transition(self, connection_id, src, dst, Pr_Actual, Pr_Max, payoff, block, commands_raw=None):
+        # 计数器递增
         if connection_id not in self.step_counter:
             self.step_counter[connection_id] = 1
         else:
@@ -26,10 +32,11 @@ class ExperimentLogger:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
         step = self.step_counter[connection_id]
 
-        with open(self.filename, 'a', newline='', encoding='utf-8') as f:
+        with codecs.open(self.filename, 'ab', encoding='utf-8') as f:
             writer = csv.writer(f)
             writer.writerow([
                 timestamp, connection_id, step,
                 src, dst, Pr_Actual, Pr_Max,
                 payoff, block, commands_raw
             ])
+

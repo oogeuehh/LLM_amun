@@ -3,7 +3,6 @@ import time
 
 logger = ExperimentLogger("logs/test_experiment.log")
 
-# 模拟几条转移
 logger.log_transition(
     connection_id="test_conn_1",
     src=None,

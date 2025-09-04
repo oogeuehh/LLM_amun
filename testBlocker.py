@@ -35,8 +35,8 @@ if __name__ == "__main__":
     test_commands = [
         # "ls",
         # "pwd"
-        "uname -a",
-        "ifconfig"
+        "ls",
+        "cat /bin"
         # "ls; pwd",
         # "uname -a && ifconfig",
         # "exit"

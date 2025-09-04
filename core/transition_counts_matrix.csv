@@ -1,5 +1,6 @@
-﻿,ifconfig,ls,pwd,uname -a
-ifconfig,0,2,1,4
-ls,3,0,5,2
-pwd,1,5,0,2
-uname -a,3,3,1,0
+﻿,ifconfig,ls,pwd,uname -a,cat /bin
+ifconfig,0,2,1,4,0
+ls,3,0,5,2,1
+pwd,1,5,0,2,0
+uname -a,3,3,1,0,0
+cat /bin,0,0,0,0,0

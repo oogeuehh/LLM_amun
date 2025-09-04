@@ -45,7 +45,12 @@ from core.llm_engine import LLMContextManager, API_KEY, MODEL, BASE_URL
 ### DF: import Blocker
 from blocker import Blocker
 from blocker_logger import ExperimentLogger
-                
+
+global_blocker = Blocker(
+    counts_file="core/transition_counts_matrix.csv",
+    probs_file="core/transition_probabilities_matrix.csv"
+)
+
 class amun_reqhandler(asynchat.async_chat):
 
 	def __init__(self, divLogger):
@@ -75,7 +80,7 @@ class amun_reqhandler(asynchat.async_chat):
 		self.llm = None
 
 		### DF: Blocker init
-		self.blocker = Blocker("transition_matrix.csv")
+		self.blocker = global_blocker
 		self.experiment_logger = ExperimentLogger("logs/experiment.log")
 
 	def __del__(self):
